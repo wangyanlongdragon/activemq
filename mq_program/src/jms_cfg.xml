@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:context="http://www.springframework.org/schema/context"
+    xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:util="http://www.springframework.org/schema/util"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+	 http://www.springframework.org/schema/context   
+           http://www.springframework.org/schema/context/spring-context-2.5.xsd
+	http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.5.xsd
+	http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.5.xsd
+    http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-2.5.xsd">	
+
+	<bean id="propertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="location" value="classpath:download.properties" />
+	</bean>	
+	
+	
+	<bean id="jmsFactory" class="org.apache.activemq.pool.PooledConnectionFactory" destroy-method="stop">
+	    <property name="connectionFactory">
+            <bean class="org.apache.activemq.ActiveMQConnectionFactory">
+                <property name="brokerURL" >
+					<value><![CDATA[failover://(${amqURL})?randomize=false&nested.soTimeout=3000&nested.connectionTimeout=3000&nested.wireFormat.maxInactivityDuration=2900&nested.wireFormat.maxInactivityDurationInitalDelay=3000&jms.prefetchPolicy.queuePrefetch=1&jms.redeliveryPolicy.maximumRedeliveries=0&timeout=3000&maxReconnectDelay=100&maxReconnectAttempts=0]]></value>
+				</property>
+            </bean>
+        </property>
+	    <property name="maxConnections" value="${thread.PoolMAXSize}"></property>
+  	</bean>
+  	
+    <bean id="cachingConnectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">
+        <property name="targetConnectionFactory" ref="jmsFactory"/>
+        <property name="sessionCacheSize" value="${thread.PoolMAXSize}"/>
+    </bean>
+    <bean id="singleConnectionFactory" class="org.springframework.jms.connection.SingleConnectionFactory">
+    	<property name="targetConnectionFactory" ref="jmsFactory"/>
+    </bean>
+    
+	<bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<!-- <property name="connectionFactory" ref="cachingConnectionFactory" /> -->
+		<property name="connectionFactory" ref="singleConnectionFactory" />
+		<property name="sessionTransacted" value="true"/>
+		<property name="receiveTimeout" value="10000" />
+	</bean>
+	    <!-- 定义消息队列（Queue） -->
+    <bean id="destination" class="org.apache.activemq.command.ActiveMQQueue">
+        <!-- 设置消息队列的名字 -->
+        <constructor-arg>
+            <value>dragon</value>
+        </constructor-arg>
+    </bean>	
+	<!--queue消息生产者 -->
+	<bean id="producer" class="com.wyl.producer.MQProducer">
+		<property name="destination" ref="destination"></property>
+		<property name="jmsTemplate" ref="jmsTemplate"></property>
+	</bean>
+
+	<!--queue消息消费者 -->
+	<bean id="consumer" class="com.wyl.consumer.MQConsumer">
+		<property name="destination" ref="destination"></property>
+		<property name="jmsTemplate" ref="jmsTemplate"></property>
+	</bean>
+	<bean id="msgListener" class="com.wyl.consumer.MyMessageListener"/>
+	<bean id="jmsContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="connectionFactory" ref="singleConnectionFactory" />
+		<property name="destination" ref="destination"></property>
+		<property name="messageListener" ref="msgListener" />
+	</bean>
+</beans>
